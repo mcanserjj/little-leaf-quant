@@ -1,0 +1,36 @@
+{
+  "group_id": "S-A",
+  "strategy_id": "short_trend_volume_v1",
+  "version": 1,
+  "parent_version": null,
+  "created_at": "2026-09-01T23:11:13+08:00",
+  "change_reason": "短长线分组基线",
+  "horizon": "short",
+  "objective": "研究趋势与量价确认后的短期延续",
+  "selection": [
+    "MA20>MA60",
+    "20日动量为正",
+    "流动性排名"
+  ],
+  "entry": [
+    "候选状态必须为ready",
+    "当前快照通过停牌与涨跌停门禁"
+  ],
+  "exit": [
+    "固定止损",
+    "目标收益",
+    "最大持有期"
+  ],
+  "sizing": "五仓等预算, 单股目标约总资产20%, 不足100股则空仓",
+  "risk": [
+    "最多5只",
+    "允许空仓",
+    "T+1",
+    "不可成交状态不撮合"
+  ],
+  "parameters": {
+    "stop_loss_pct": -0.06,
+    "take_profit_pct": 0.12,
+    "max_holding_days": 10
+  }
+}

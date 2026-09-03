@@ -1,0 +1,27 @@
+[
+  {
+    "url": "https://github.com/microsoft/qlib",
+    "label": "Qlib",
+    "added_at": "2026-09-01T23:14:25+08:00"
+  },
+  {
+    "url": "https://github.com/ricequant/rqalpha",
+    "label": "RQAlpha",
+    "added_at": "2026-09-01T23:14:25+08:00"
+  },
+  {
+    "url": "https://github.com/yutiansut/QUANTAXIS",
+    "label": "QUANTAXIS",
+    "added_at": "2026-09-01T23:14:25+08:00"
+  },
+  {
+    "url": "https://github.com/nautechsystems/nautilus_trader",
+    "label": "NautilusTrader",
+    "added_at": "2026-09-01T23:14:25+08:00"
+  },
+  {
+    "url": "https://github.com/akfamily/akquant",
+    "label": "AKQuant",
+    "added_at": "2026-09-01T23:14:25+08:00"
+  }
+]

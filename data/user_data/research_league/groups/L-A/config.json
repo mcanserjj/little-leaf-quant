@@ -1,0 +1,10 @@
+{
+  "group_id": "L-A",
+  "name": "长线·价值质量",
+  "horizon": "long",
+  "strategy_id": "long_value_quality_v1",
+  "strategy_version": 2,
+  "parent_group_id": null,
+  "status": "running",
+  "created_at": "2026-09-01T23:11:13+08:00"
+}

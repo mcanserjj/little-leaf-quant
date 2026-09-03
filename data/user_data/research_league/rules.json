@@ -1,0 +1,57 @@
+{
+  "schema_version": 3,
+  "market": "CN_A_SHARE",
+  "initial_cash": 100000.0,
+  "max_positions": 5,
+  "buy_lot_size": 100,
+  "t_plus_one": true,
+  "quote_refresh_seconds": 600,
+  "market_quote_refresh_seconds": 5,
+  "strategy_evaluation_seconds": 600,
+  "execution_mode": "current_snapshot",
+  "execution_modes": [
+    "current_snapshot",
+    "next_snapshot"
+  ],
+  "slippage_bps": 0,
+  "slippage_is_user_assumption": true,
+  "max_quote_age_seconds": 120,
+  "fees": {
+    "broker_commission_rate": 0.00025,
+    "broker_commission_min": 5.0,
+    "broker_commission_is_user_assumption": true,
+    "broker_commission_includes_exchange_handling_fee": true,
+    "exchange_handling_rate_reference": 3.41e-05,
+    "transfer_fee_rate": 1e-05,
+    "stamp_duty_sell_rate": 0.0005,
+    "effective_as_of": "2026-09-01"
+  },
+  "rule_sources": {
+    "sse_trading_rules": "https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/exchange/c/c_20260424_10816482.shtml",
+    "sse_fee_table": "https://www.sse.com.cn/services/tradingservice/charge/ssecharge/",
+    "chinaclear_transfer_fee": "https://www.chinaclear.cn/zdjs/editor_file/20220701154723234.pdf",
+    "stamp_duty": "https://shanghai.chinatax.gov.cn/tax/zcfw/zcfgk/yhs/202308/t468451.html"
+  },
+  "universe": {
+    "exchanges": [
+      "SH",
+      "SZ"
+    ],
+    "exclude_st": true,
+    "exclude_delisting": true,
+    "exclude_suspended": true,
+    "min_listing_trading_days": 60,
+    "exclude_boards": [
+      "STAR",
+      "CHINEXT",
+      "BSE"
+    ]
+  },
+  "news": {
+    "shared_raw_archive": true,
+    "group_specific_interpretation": true,
+    "authoritative_source_can_trigger": true,
+    "media_requires_corroboration": 2,
+    "social_sentiment_cannot_trigger_alone": true
+  }
+}

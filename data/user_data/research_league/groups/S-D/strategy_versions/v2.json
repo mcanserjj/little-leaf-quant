@@ -1,0 +1,48 @@
+{
+  "group_id": "S-D",
+  "strategy_id": "short_multi_factor_v1",
+  "version": 2,
+  "parent_version": 1,
+  "created_at": "2026-09-02T10:48:05+08:00",
+  "change_reason": "新增策略自动买入触发区间",
+  "horizon": "short",
+  "objective": "组合动量、低波和流动性的短期横截面排名",
+  "selection": [
+    "20日动量",
+    "60日波动率",
+    "20日成交额"
+  ],
+  "entry": [
+    "候选状态必须为ready",
+    "当前快照通过停牌与涨跌停门禁",
+    "短期多因子：围绕信号价等待均衡入场"
+  ],
+  "exit": [
+    "固定止损",
+    "目标收益",
+    "最大持有期"
+  ],
+  "sizing": "五仓等预算, 单股目标约总资产20%, 不足100股则空仓",
+  "risk": [
+    "最多5只",
+    "允许空仓",
+    "T+1",
+    "不可成交状态不撮合"
+  ],
+  "parameters": {
+    "stop_loss_pct": -0.06,
+    "take_profit_pct": 0.1,
+    "max_holding_days": 10,
+    "entry_price": {
+      "reference": "candidate_close",
+      "annual_volatility_field": "volatility60",
+      "fallback_daily_vol_pct": 0.02,
+      "min_daily_vol_pct": 0.008,
+      "max_daily_vol_pct": 0.05,
+      "lower_vol_multiplier": -0.75,
+      "upper_vol_multiplier": 0.5,
+      "label": "短期多因子：围绕信号价等待均衡入场"
+    }
+  },
+  "status": "active"
+}

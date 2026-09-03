@@ -1,0 +1,10 @@
+{
+  "group_id": "L-C",
+  "name": "长线·基本面改善",
+  "horizon": "long",
+  "strategy_id": "long_fundamental_improvement_v1",
+  "strategy_version": 2,
+  "parent_group_id": null,
+  "status": "running",
+  "created_at": "2026-09-01T23:11:13+08:00"
+}

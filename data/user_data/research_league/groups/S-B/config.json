@@ -1,0 +1,10 @@
+{
+  "group_id": "S-B",
+  "name": "短线·超跌反转",
+  "horizon": "short",
+  "strategy_id": "short_reversal_v1",
+  "strategy_version": 2,
+  "parent_group_id": null,
+  "status": "running",
+  "created_at": "2026-09-01T23:11:13+08:00"
+}
