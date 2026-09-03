@@ -75,12 +75,14 @@ export type ProviderStatus = { configured: boolean; masked?: string | null; stor
 export type ExecutionStatus = {
   enabled: boolean;
   providerConfigured: boolean;
-  state?: "waiting" | "blocked" | "paused" | "idle" | "running" | "error";
+  state?: "waiting" | "blocked" | "paused" | "idle" | "running" | "rate_limited" | "error";
   reason?: string;
   checkedAt?: string;
   lastQuoteAt?: string;
   lastEvaluationAt?: string;
   quoteCount?: number;
+  quoteScope?: string;
+  cooldownUntil?: string;
   executionMode: "current_snapshot" | "next_snapshot";
   quoteRefreshSeconds: number;
   strategyEvaluationSeconds: number;

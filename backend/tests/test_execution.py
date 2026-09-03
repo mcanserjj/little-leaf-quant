@@ -157,3 +157,89 @@ def test_initialize_creates_only_missing_empty_simulation_state(tmp_path):
     write(account_path, account)
     service.initialize()
     assert json.loads(account_path.read_text(encoding="utf-8"))["cash"] == 12345
+
+
+def test_quote_provider_uses_batch_timestamp_without_extra_watermark_request(monkeypatch):
+    calls = []
+
+    class Response:
+        status_code = 200
+        headers = {}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"code": 0, "data": {"timestamp": 1, "item": [{"thscode": "600000.SH", "last_price": 10, "prev_price": 9.9, "turnover": 1000}]}}
+
+    class Client:
+        def __init__(self, **_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def get(self, url, params):
+            calls.append((url, params))
+            return Response()
+
+    monkeypatch.setattr(execution, "load_hithink_key", lambda: "test-key")
+    monkeypatch.setattr(execution.httpx, "Client", Client)
+    monkeypatch.setattr(execution, "validated_market_time", lambda *_: datetime(2026, 9, 2, 10, 0, tzinfo=SHANGHAI))
+
+    rows = execution.HiThinkQuoteProvider().fetch(["600000.SH"])
+
+    assert len(calls) == 1
+    assert calls[0][1] == {"thscodes": "600000.SH"}
+    assert rows[0]["quote_market_time"] == "2026-09-02T10:00:00+08:00"
+
+
+def test_service_refreshes_positions_between_candidate_evaluations(monkeypatch, tmp_path):
+    engine = engine_at(tmp_path)
+    group = engine.root / "groups" / "S-A"
+    write(group / "positions.json", [{"symbol": "600000.SH", "quantity": 100, "buy_price": 10, "buy_fees": 5, "buy_time": "2026-09-01T10:00:00+08:00", "buy_trade_date": "2026-09-01"}])
+    write(group / "candidates.json", {"status": "ready", "strategy_version": 2, "as_of": "2026-09-02", "items": [{"symbol": "000001.SZ", "entry_price_min": 9, "entry_price_max": 11}]})
+    write(engine.root / "execution_state.json", {"last_evaluation_at": "2026-09-02T10:00:00+08:00"})
+
+    class Provider:
+        def __init__(self):
+            self.calls = []
+
+        def fetch(self, symbols, _):
+            self.calls.append(symbols)
+            return [{**quote(10.0), "symbol": symbol} for symbol in symbols]
+
+    provider = Provider()
+    service = execution.ExecutionService(engine=engine, provider=provider)
+    monkeypatch.setattr(execution, "load_hithink_key", lambda: "test-key")
+
+    service.tick(datetime(2026, 9, 2, 10, 5, tzinfo=SHANGHAI))
+    service.tick(datetime(2026, 9, 2, 10, 10, tzinfo=SHANGHAI))
+
+    assert provider.calls[0] == ["600000.SH"]
+    assert provider.calls[1] == ["000001.SZ", "600000.SH"]
+
+
+def test_service_backs_off_after_rate_limit(monkeypatch, tmp_path):
+    engine = engine_at(tmp_path)
+
+    class Provider:
+        calls = 0
+
+        def fetch(self, *_):
+            self.calls += 1
+            raise execution.QuoteRateLimitError(30)
+
+    provider = Provider()
+    service = execution.ExecutionService(engine=engine, provider=provider)
+    monkeypatch.setattr(execution, "load_hithink_key", lambda: "test-key")
+    first = service.tick(datetime(2026, 9, 2, 10, 0, tzinfo=SHANGHAI))
+    second = service.tick(datetime(2026, 9, 2, 10, 0, 5, tzinfo=SHANGHAI))
+
+    assert first["state"] == "rate_limited"
+    assert first["cooldownUntil"] == "2026-09-02T10:00:30+08:00"
+    assert second["state"] == "rate_limited"
+    assert provider.calls == 1

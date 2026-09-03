@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import threading
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
@@ -396,22 +396,26 @@ class HiThinkQuoteProvider:
         rows: list[dict[str, Any]] = []
         fetched_at = now_iso()
         with httpx.Client(headers={"X-api-key": token}, timeout=30) as client:
-            watermark_response = client.get(f"{HITHINK_BASE_URL}/api/a-share/prices/snapshot", params={"limit": 1, "offset": 0})
-            watermark_response.raise_for_status()
-            watermark_envelope = watermark_response.json()
-            if watermark_envelope.get("code") != 0:
-                raise RuntimeError(f"HiThink code={watermark_envelope.get('code')}: {watermark_envelope.get('message', '未知错误')}")
-            timestamp = (watermark_envelope.get("data") or {}).get("timestamp")
-            market_time = validated_market_time(timestamp, datetime.now(SHANGHAI), max_age_seconds)
             for offset in range(0, len(symbols), 100):
                 response = client.get(f"{HITHINK_BASE_URL}/api/a-share/prices/snapshot", params={"thscodes": ",".join(symbols[offset:offset + 100])})
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    raise QuoteRateLimitError(int(retry_after) if retry_after and retry_after.isdigit() else None)
                 response.raise_for_status()
                 envelope = response.json()
                 if envelope.get("code") != 0:
                     raise RuntimeError(f"HiThink code={envelope.get('code')}: {envelope.get('message', '未知错误')}")
-                for item in (envelope.get("data") or {}).get("item") or []:
+                data = envelope.get("data") or {}
+                market_time = validated_market_time(data.get("timestamp"), datetime.now(SHANGHAI), max_age_seconds)
+                for item in data.get("item") or []:
                     rows.append({"symbol": item.get("thscode"), "last_price": item.get("last_price"), "prev_close": item.get("prev_price"), "open": item.get("open_price"), "high": item.get("high_price"), "low": item.get("low_price"), "volume": item.get("volume"), "turnover": item.get("turnover"), "change_pct": item.get("price_change_ratio_pct"), "quote_source": "hithink", "fetched_at": fetched_at, "quote_market_time": market_time.isoformat(timespec="seconds")})
         return rows
+
+
+class QuoteRateLimitError(RuntimeError):
+    def __init__(self, retry_after: int | None = None):
+        super().__init__("HiThink行情接口触发限流")
+        self.retry_after = retry_after
 
 
 class ExecutionService:
@@ -421,13 +425,33 @@ class ExecutionService:
         self._lock = threading.Lock()
 
     def relevant_symbols(self) -> list[str]:
+        return sorted(set(self.position_symbols()) | set(self.candidate_symbols()))
+
+    def position_symbols(self) -> list[str]:
         symbols: set[str] = set()
         for group_id in self.engine.group_ids:
             group = self.engine.root / "groups" / group_id
             symbols.update(str(row.get("symbol")) for row in read_json(group / "positions.json", []) if row.get("symbol"))
+        return sorted(symbols)
+
+    def candidate_symbols(self) -> list[str]:
+        symbols: set[str] = set()
+        for group_id in self.engine.group_ids:
+            group = self.engine.root / "groups" / group_id
             candidates = read_json(group / "candidates.json", {})
             symbols.update(str(row.get("symbol")) for row in candidates.get("items", []) if row.get("symbol"))
         return sorted(symbols)
+
+    def _evaluation_due(self, local: datetime, rules: dict[str, Any]) -> bool:
+        state = read_json(self.engine.root / "execution_state.json", {})
+        previous = state.get("last_evaluation_at") or state.get("last_cycle_at")
+        if not previous:
+            return True
+        try:
+            elapsed = (local - datetime.fromisoformat(previous).astimezone(SHANGHAI)).total_seconds()
+        except (TypeError, ValueError):
+            return True
+        return elapsed >= int(rules.get("strategy_evaluation_seconds") or rules.get("quote_refresh_seconds") or 600)
 
     def tick(self, at: datetime | None = None) -> dict[str, Any]:
         local = _local(at)
@@ -438,16 +462,39 @@ class ExecutionService:
             return self._save_state({"state": "paused", "reason": "联赛未运行", "checkedAt": local.isoformat(timespec="seconds")})
         if not load_hithink_key():
             return self._save_state({"state": "blocked", "reason": "HiThink API Key未配置", "checkedAt": local.isoformat(timespec="seconds")})
-        symbols = self.relevant_symbols()
+        service_state = read_json(self._service_path(), {})
+        cooldown_until = service_state.get("cooldownUntil")
+        if cooldown_until:
+            try:
+                remaining = int((datetime.fromisoformat(cooldown_until).astimezone(SHANGHAI) - local).total_seconds())
+            except (TypeError, ValueError):
+                remaining = 0
+            if remaining > 0:
+                return self._save_state({"state": "rate_limited", "reason": f"HiThink限流冷却中，约{remaining}秒后重试", "checkedAt": local.isoformat(timespec="seconds")})
+        rules = self.engine.rules()
+        evaluation_due = self._evaluation_due(local, rules)
+        symbols = self.relevant_symbols() if evaluation_due else self.position_symbols()
         if not symbols:
-            return self._save_state({"state": "idle", "reason": "没有持仓或候选股票", "checkedAt": local.isoformat(timespec="seconds")})
+            reason = "没有持仓或候选股票" if evaluation_due else "没有持仓，候选行情将在下次策略评估时刷新"
+            return self._save_state({"state": "idle", "reason": reason, "checkedAt": local.isoformat(timespec="seconds")})
         if not self._lock.acquire(blocking=False):
             return self.status()
         try:
-            quotes = self.provider.fetch(symbols, int(self.engine.rules().get("max_quote_age_seconds", 120)))
-            self.engine.refresh_quotes(quotes, local)
-            result = self.engine.run_cycle(quotes, at=local)
-            return self._save_state({"state": "running", "reason": result.get("reason") or result.get("state"), "checkedAt": local.isoformat(timespec="seconds"), "lastQuoteAt": local.isoformat(timespec="seconds"), "quoteCount": len(quotes), "lastEvaluationAt": read_json(self.engine.root / "execution_state.json", {}).get("last_evaluation_at")})
+            quotes = self.provider.fetch(symbols, int(rules.get("max_quote_age_seconds", 120)))
+            if evaluation_due:
+                result = self.engine.run_cycle(quotes, at=local)
+                reason = result.get("reason") or result.get("state")
+                scope = "持仓和候选"
+            else:
+                self.engine.refresh_quotes(quotes, local)
+                reason = "持仓行情已刷新；候选行情每10分钟随策略评估刷新"
+                scope = "仅持仓"
+            return self._save_state({"state": "running", "reason": reason, "checkedAt": local.isoformat(timespec="seconds"), "lastQuoteAt": local.isoformat(timespec="seconds"), "quoteCount": len(quotes), "quoteScope": scope, "lastEvaluationAt": read_json(self.engine.root / "execution_state.json", {}).get("last_evaluation_at"), "rateLimitFailures": 0, "cooldownUntil": None})
+        except QuoteRateLimitError as exc:
+            failures = int(read_json(self._service_path(), {}).get("rateLimitFailures") or 0) + 1
+            delay = exc.retry_after or min(15 * (2 ** (failures - 1)), 120)
+            until = local + timedelta(seconds=delay)
+            return self._save_state({"state": "rate_limited", "reason": f"HiThink请求过于频繁，已暂停{delay}秒后自动重试", "checkedAt": local.isoformat(timespec="seconds"), "rateLimitFailures": failures, "cooldownUntil": until.isoformat(timespec="seconds")})
         except Exception as exc:
             return self._save_state({"state": "error", "reason": str(exc), "checkedAt": local.isoformat(timespec="seconds")})
         finally:

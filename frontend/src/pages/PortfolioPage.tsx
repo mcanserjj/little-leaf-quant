@@ -33,8 +33,8 @@ export function PortfolioPage({ groups, overview, refresh }: { groups: Group[]; 
       </header>
       {message && <p className="action-message">{message}</p>}
       <section className={`execution-strip ${execution?.state || "waiting"}`}>
-        <div><span>自动模拟执行</span><strong>{execution?.enabled ? "已启用" : "已暂停"}</strong><small>{execution?.reason || "等待服务状态"}</small></div>
-        <div><span>行情刷新</span><strong>{execution?.quoteRefreshSeconds || 5} 秒</strong><small>{execution?.lastQuoteAt ? `最近 ${new Date(execution.lastQuoteAt).toLocaleTimeString()}` : "尚无在线行情"}</small></div>
+        <div><span>自动模拟执行</span><strong>{execution?.state === "rate_limited" ? "限流冷却" : execution?.enabled ? "已启用" : "已暂停"}</strong><small>{execution?.reason || "等待服务状态"}</small></div>
+        <div><span>行情刷新</span><strong>{execution?.quoteRefreshSeconds || 5} 秒</strong><small>{execution?.lastQuoteAt ? `最近 ${new Date(execution.lastQuoteAt).toLocaleTimeString()} · ${execution.quoteScope || "行情"}` : "尚无在线行情"}</small></div>
         <div><span>策略评估</span><strong>{Math.round((execution?.strategyEvaluationSeconds || 600) / 60)} 分钟</strong><small>{execution?.lastEvaluationAt ? `最近 ${new Date(execution.lastEvaluationAt).toLocaleTimeString()}` : "尚未自动评估"}</small></div>
         <label><span>成交方式</span><select value={execution?.executionMode || "current_snapshot"} disabled={working} onChange={(event) => setMode(event.target.value as "current_snapshot" | "next_snapshot")}><option value="current_snapshot">信号本轮现价</option><option value="next_snapshot">下一快照成交</option></select><small>复盘会保留成交方式</small></label>
       </section>
